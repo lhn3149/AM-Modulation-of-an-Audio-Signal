@@ -1,0 +1,183 @@
+%% EE 484 - AM modulation
+% Student: Duc Le (dhl3772@rit.edu), Long Nguyen (lhn3149@rit.edu)
+clc
+close all
+clear
+load RITVOICE
+
+%% Modulation at Rx
+
+% 1
+Ts = 1/Fs;
+N = length(m);
+td = (0:Ts:(N-1)*Ts)';
+%sound(m, Fs/2) % Listen to RITVOICE
+
+figure %1
+hold on
+plot(td, m)
+title('Figure 1: Message')
+xlabel('t')
+ylabel('m(t)')
+hold off
+
+% 2
+M = fftshift(fft(m));
+fd = (-Fs/2:Fs/N:Fs/2-Fs/N)';
+smM = abs(M).^2;
+figure %2
+hold on
+plot(fd, smM)
+title('Figure 2: Spectrum of message')
+xlabel('f')
+ylabel('|M(f)|^2')
+hold off
+
+% 3
+smMdB = 10*log10(smM/max(smM));
+figure %3
+hold on
+plot(fd, smMdB)
+plot([-Fs/2, Fs/2-Fs/N],[-100,-100])
+xlabel('f')
+ylabel('|M(f)|^2 in dB')
+title('Figure 3: Spectrum of message in dB')
+hold off
+
+[P,Fp] = max(smMdB);
+W = find(smMdB(Fp:end)<-100,1, 'first')*Fs/N;% return the first 1 index 
+% -> then scale with the spacing to get value
+
+% The bandwidth of the message signal is W = 5.9 kHz
+
+% 4
+g = cumsum(m)*Ts; %integral is from -inf to t (has to scaled by t)
+kf = 10*W/max(abs(m)); %Ts: 3.125us %kf: 90.7kHz %beta 10
+p = 2*pi*kf*g;
+
+Ac = 10*sqrt(2);%% s^2 + s~^2 = 10;
+fc = Fs/10;  % fc: 32kHz
+s = Ac*cos(2*pi*fc*td + p);
+figure %4
+hold on
+title('Figure 4: Sent signal')
+xlabel('t')
+ylabel('s(t)')
+plot(td,s)
+xlim([0.3, 0.3+1000*Ts])
+hold off
+
+S = fftshift(fft(s));
+smS = abs(S).^2;
+figure %5
+hold on
+title('Figure 5: Spectrum of sent signal')
+plot(fd, smS)
+xlabel('f')
+ylabel('|S(t)|^2|')
+hold off
+
+% The bandwidth Wr of the FM signal is defined as the frequency range in
+% which 98% of the power is contained
+
+Scum = cumsum(smS(1:round(N/2)))/Ts; % cumulative power of S across all frequencies
+figure
+title('Figure 6: Spectrum of sent signal in dB')
+plot(fd, 10*log(smS/max(smS)))
+Wr = (find(smS == max(smS), 1, 'first')-find(Scum>0.01*max(Scum),1,'first'))*Fs/N ; 
+% freq at max power minus freq to the left of which 1% of power is contained 
+
+% The bandwidth of the FM signal is Wr = 39.6 kHz
+% The bandwidth is about 1/8 of the sampling frequency fc
+
+% Suppose we use the same definition for the bandwidth Wm of the message
+% signal m(t)
+
+Mcum = cumsum(smM(1:round(N/2)))/Ts; % cumulative power of S across all frequencies
+Wm = (find(smM == max(smM), 1, 'first')-find(Mcum>0.01*max(Mcum),1,'first'))*Fs/N ; 
+% freq at max power minus freq to the left of which 1% of power is contained 
+
+% Bandwidth of the message is 1.7244 kHz
+% With the same definition, Wr/Wd = 22.96, approximately equal to 2(B+1) =
+% 22. So our model is consistent with Carson's rule.
+
+% Wr does not depend on fc.
+%% Demodulation at Rx
+r = s;
+z = diff(r)/Ts;
+z = [0;z];
+
+v = envelope(z);
+hm = v/(2*pi*Ac*kf) - fc/kf;
+figure
+hold on
+plot(td, m)
+plot(td, hm)
+legend('m(t)', 'hm(t)')
+title('Figure 5b: Demodulation at Rx')
+hold off
+
+sound(hm, Fs/2)
+
+% The received signal is very similar to the transmitted signal in terms of
+% frequency and amplitude. There is however a slight error in the offset.
+
+% The resultant sound from the received signal is similar to the original
+% signal
+
+%% Channel fading and noise
+% SNR = 10dB= 10
+w = zeros(length(m),1);
+H = 2;
+SNR = 10;
+sig = sqrt(norm(s/H)^2/(N*SNR)); %N: length of m = 180k, variance add!!!
+
+for i = 1:1:length(m)
+    w(i) = sig*randn(1,1);
+end
+r = s/H + w;
+% Demodulation on noisy r
+z = diff(r)/Ts;
+z = [0;z];
+
+v = envelope(z);
+hm = v/(2*pi*Ac*kf) - fc/kf;
+figure
+hold on
+title('Figure 6, SNR = 10')
+plot(td, m)
+plot(td, hm)
+legend('m(t)', 'hm(t)')
+hold off
+
+sound(hm, Fs/2)
+
+% SNR = -10dB= 0.1
+w = zeros(length(m),1);
+H = 2;
+SNR = 0.1;
+sig = sqrt(norm(s/H)^2/(N*SNR));
+
+for i = 1:1:length(m)
+    w(i) = sig*randn(1,1);
+end
+r = s/H + w;
+
+z = diff(r)/Ts;
+z = [z; 0];
+
+v = envelope(z);
+hm = v/(2*pi*Ac*kf) - fc/kf;
+figure
+hold on
+title('Figure 6, SNR = -10dB = 0.1')
+plot(td, m)
+plot(td, hm)
+legend('m(t)', 'hm(t)')
+hold off
+
+%sound(hm, Fs/2)
+
+% When SNR is 10 dB, the received signal can still be heard with some
+% background noise. However, when SNR is -10dB, the received signal is
+% incomprehensible.
